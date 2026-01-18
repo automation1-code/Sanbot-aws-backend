@@ -1,27 +1,60 @@
+// ================= IMPORTS =================
 import express from "express";
 import dotenv from "dotenv";
+import cors from "cors";
+import fetch from "node-fetch";
+import FormData from "form-data";
+import path from "path";
+import { fileURLToPath } from "url";
+
 import { SYSTEM_PROMPT } from "./prompt.js";
 import { sessionConfig } from "./config.js";
 
-dotenv.config();
+// ================= FIX __dirname (ESM) =================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// ================= LOAD ENV =================
+dotenv.config({
+  path: path.resolve(__dirname, "../.env"),
+});
+
+// ================= APP SETUP =================
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3051;
 
-// Accept raw SDP
+// ================= MIDDLEWARE =================
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST"],
+  })
+);
+
+// Accept raw SDP or plain text
 app.use(express.text({ type: ["application/sdp", "text/plain"] }));
 
+// ================= ROUTES =================
+
+// Health check
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", ai: "realtime-ready" });
+});
+
+// Create realtime AI session
 app.post("/session", async (req, res) => {
   try {
     const sdpOffer = req.body;
 
     if (!sdpOffer) {
-      console.error("❌ No SDP offer received");
       return res.status(400).send("Missing SDP offer");
     }
 
-    console.log("📞 Session request received");
-    console.log("🔑 Using API key:", process.env.OPENAI_API_KEY ? "✅ Set" : "❌ NOT SET");
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).send("OPENAI_API_KEY not set");
+    }
+
+    console.log("📡 Session request received");
 
     const fullSessionConfig = {
       ...sessionConfig,
@@ -29,71 +62,46 @@ app.post("/session", async (req, res) => {
     };
 
     const formData = new FormData();
-    formData.set("sdp", sdpOffer);
-    formData.set("session", JSON.stringify(fullSessionConfig));
+    formData.append("sdp", sdpOffer);
+    formData.append("session", JSON.stringify(fullSessionConfig));
 
-    console.log("📤 Sending request to OpenAI...");
-
-    // Add timeout and retry logic
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
-    try {
-      const response = await fetch(
-        "https://api.openai.com/v1/realtime/calls",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
-          },
-          body: formData,
-          signal: controller.signal
-        }
-      );
-
-      clearTimeout(timeout);
-
-      console.log("📥 OpenAI response status:", response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        
-        // Check if it's a 504 timeout
-        if (response.status === 504) {
-          console.error("⏱️ OpenAI API timeout (504) - OpenAI servers are busy");
-          console.log("💡 Suggestion: Try again in a few seconds");
-          return res.status(503).send("OpenAI API is temporarily busy. Please try again.");
-        }
-
-        console.error("❌ OpenAI error:", errorText);
-        return res.status(response.status).send(`OpenAI API error: ${errorText}`);
+    const response = await fetch(
+      "https://api.openai.com/v1/realtime/calls",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: formData,
+        signal: controller.signal,
       }
+    );
 
-      const sdpAnswer = await response.text();
-      console.log("✅ Session created successfully");
-      res.send(sdpAnswer);
+    clearTimeout(timeout);
 
-    } catch (fetchError) {
-      clearTimeout(timeout);
-      
-      if (fetchError.name === 'AbortError') {
-        console.error("⏱️ Request timeout after 30 seconds");
-        return res.status(504).send("Request to OpenAI timed out");
-      }
-      
-      throw fetchError;
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ OpenAI error:", errorText);
+      return res.status(response.status).send(errorText);
     }
 
+    const sdpAnswer = await response.text();
+    console.log("✅ Session created successfully");
+    res.send(sdpAnswer);
+
   } catch (err) {
+    if (err.name === "AbortError") {
+      return res.status(504).send("OpenAI request timed out");
+    }
     console.error("❌ Server error:", err.message);
-    res.status(500).send(`Server error: ${err.message}`);
+    res.status(500).send(err.message);
   }
 });
 
-app.get("/health", (_, res) => {
-  res.json({ status: "ok", ai: "realtime-ready" });
-});
-
-app.listen(PORT, () => {
+// ================= START SERVER =================
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Sanbot AI backend running on port ${PORT}`);
 });

@@ -6,7 +6,10 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "express": "^4.22.1"
+    "express": "^4.22.1",
+    "form-data": "^4.0.5",
+    "node-fetch": "^3.3.2"
   }
 }
