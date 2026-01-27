@@ -1,0 +1,17 @@
+FROM node:18-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copy server code and supporting directories
+COPY server.js ./
+COPY orchestration/ ./orchestration/
+COPY liveavatar/ ./liveavatar/
+COPY heygen/ ./heygen/
+
+EXPOSE 3051
+
+CMD ["node", "server.js"]

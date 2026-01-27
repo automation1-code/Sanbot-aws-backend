@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  # Node.js backend — HTTP endpoints for Android app (session start/stop, tokens)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "3051:3051"
+    env_file: .env
+    restart: unless-stopped
+
+  # Python LiveKit agent — worker process, no ports needed
+  # Connects outbound to LiveKit Cloud, auto-dispatches to rooms
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    env_file: .env
+    restart: unless-stopped

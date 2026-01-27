@@ -1,0 +1,21 @@
+# SanBot LiveKit Agent - Python Dependencies
+#
+# Install: pip install -r requirements.txt
+# Or:      pip install "livekit-agents[openai,silero]>=1.3.6"
+
+# LiveKit Agents framework with OpenAI Realtime plugin
+# No LiveAvatar or Cartesia plugins — we use full Realtime audio mode
+# and manual HeyGen BYOLI for avatar lip-sync video
+livekit-agents[openai,silero]>=1.3.6
+
+# LiveKit server API (token generation for HeyGen BYOLI)
+livekit-api>=0.7.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Async HTTP client for CRM API calls + HeyGen BYOLI API
+httpx>=0.27.0
+
+# Async WebSocket client for HeyGen lip-sync audio forwarding
+aiohttp>=3.9.0

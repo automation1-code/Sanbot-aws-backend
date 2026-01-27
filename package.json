@@ -1,15 +1,18 @@
 {
-  "name": "sanbot-ai-backend",
-  "version": "1.0.0",
+  "name": "openai-realtime-heygen-backend",
+  "version": "1.1.0",
+  "description": "Backend server for OpenAI Realtime API with HeyGen LiveAvatar integration",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^4.22.1",
-    "form-data": "^4.0.5",
-    "node-fetch": "^3.3.2"
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "livekit-server-sdk": "^2.15.0"
   }
 }
