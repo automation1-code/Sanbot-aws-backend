@@ -165,7 +165,7 @@ else
   echo "  Check logs: pm2 logs sanbot-backend"
 fi
 
-# === STEP 7: Deploy Python Agent ===
+# === STEP 7: Deploy Python Agent (systemd) ===
 echo ""
 echo "[7/8] Deploying Python agent..."
 
@@ -174,20 +174,37 @@ if [ "$SKIP_PYTHON" = true ]; then
   echo "  Add LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET to .env"
   echo "  Then run: sudo ./deploy.sh"
 else
-  # Stop existing process (don't fail if not found)
-  sudo -u "$DEPLOY_USER" pm2 delete sanbot-agent 2>/dev/null || true
+  # Create systemd service file
+  cat > /etc/systemd/system/sanbot-agent.service << SYSTEMD_EOF
+[Unit]
+Description=Sanbot Python Agent
+After=network.target
 
-  # Start Python agent
-  sudo -u "$DEPLOY_USER" pm2 start "$AGENT_DIR/agent.py" \
-    --name sanbot-agent \
-    --interpreter "$AGENT_DIR/venv/bin/python3" \
-    -- start
-  echo "  Python agent started"
+[Service]
+Type=simple
+User=$DEPLOY_USER
+WorkingDirectory=$AGENT_DIR
+ExecStart=$AGENT_DIR/venv/bin/python3 agent.py start
+Restart=always
+RestartSec=5
+EnvironmentFile=$PROJECT_DIR/.env
 
-  # Wait and check if it's running
+[Install]
+WantedBy=multi-user.target
+SYSTEMD_EOF
+
+  systemctl daemon-reload
+  systemctl enable sanbot-agent
+  systemctl restart sanbot-agent
+  echo "  Python agent started (systemd)"
+
+  # Wait and check
   sleep 3
-  AGENT_STATUS=$(sudo -u "$DEPLOY_USER" pm2 show sanbot-agent 2>/dev/null | grep "status" | head -1 || echo "unknown")
-  echo "  Agent $AGENT_STATUS"
+  if systemctl is-active --quiet sanbot-agent; then
+    echo "  Agent status: running"
+  else
+    echo "  WARNING: Agent may have failed. Check: journalctl -u sanbot-agent"
+  fi
 fi
 
 # === STEP 8: Save PM2 config ===
@@ -206,11 +223,14 @@ echo "=========================================="
 echo ""
 sudo -u "$DEPLOY_USER" pm2 status
 echo ""
+echo "Python agent:"
+systemctl is-active sanbot-agent 2>/dev/null && echo "  sanbot-agent: running" || echo "  sanbot-agent: not running"
+echo ""
 echo "Test endpoints:"
 echo "  curl http://localhost:3051/health"
 echo "  curl https://$DOMAIN/health"
 echo ""
 echo "View logs:"
 echo "  pm2 logs sanbot-backend"
-echo "  pm2 logs sanbot-agent"
+echo "  sudo journalctl -u sanbot-agent -f"
 echo ""

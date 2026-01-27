@@ -1,0 +1,79 @@
+name: Test & Deploy
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ==========================================
+  # JOB 1: Test (runs on dev push + PR to main)
+  # ==========================================
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node.js syntax check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: npm install --omit=dev
+      - run: node --check server.js
+
+      # Python syntax check
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m py_compile agent/agent.py
+      - run: python3 -m py_compile agent/crm_functions.py
+      - run: python3 -m py_compile agent/heygen_byoli.py
+
+      # Ensure no secrets committed
+      - name: Check for leaked secrets
+        run: |
+          if grep -r "sk-proj-" --include="*.js" --include="*.py" --include="*.json" .; then
+            echo "ERROR: Possible API key found in code!"
+            exit 1
+          fi
+
+  # ==========================================
+  # JOB 2: Deploy (runs ONLY on merge to main)
+  # ==========================================
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/Sanbot-aws-backend
+            git pull origin main
+
+            # Node.js backend
+            npm install --omit=dev
+            pm2 restart sanbot-backend || pm2 start server.js --name sanbot-backend
+            pm2 save
+
+            # Python agent
+            cd agent
+            if [ -d "venv" ]; then
+              venv/bin/pip install -q -r requirements.txt
+            else
+              python3 -m venv venv
+              venv/bin/pip install -q -r requirements.txt
+            fi
+            cd ..
+            sudo systemctl restart sanbot-agent
+
+            # Health check
+            sleep 3
+            curl -f http://localhost:3051/health || exit 1
+            echo ""
+            echo "Deploy successful!"
